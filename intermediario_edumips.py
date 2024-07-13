@@ -11,7 +11,10 @@ def main(argv):
     input_file = argv[1]
 
     linhas = parse_input_file(input_file)
-    
+
+def save_to_file(filename):
+        with open(filename, 'w') as f:
+            f.write(''.join())  
        
 # Executa a função principal
 if __name__ == '__main__':
