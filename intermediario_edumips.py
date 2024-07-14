@@ -1,25 +1,32 @@
 import sys
 import re
-import logging
+
 
 data_section_header = f'.data\n' #string que só vai ser concatenada quando a data_section estiver pronta
 code_section_header = f'\n.code\n'
 data_section_body = ""         
 code_section_body = ""
 
+label_valor1_mult = f'\tLM1: .word32 '
+label_valor2_mult = f'\tLM2: .word32 '
+
+
 dic_var_valor = {}
 
 # trata o arquivo 3 endereços
 def parse_input_file(arquivo_tres_enderecos): 
+    # Define a expressão regular que considera operadores e números como tokens separados
+    pattern = re.compile(r'(\b\w+\b|[=+\-*/])')
     with open(arquivo_tres_enderecos,'r') as f:
-        linhas = [linha.strip().lower().split() for linha in f.readlines() if linha.strip() != ""]
+        linhas = [pattern.findall(linha.strip().lower()) for linha in f.readlines() if linha.strip() != ""]
     return linhas
 
 def executa_operacao_aritmetica(operando1, operando2, operador):
     match operador:
         case '+':
-            return operando1 + operando2
-
+            print("fff")
+            return int(operando1) + int(operando2)
+        
 #Função que trata as operações de atribuição de cópia
 def atribuicao_e_copia(lista_atribcopia):
     global data_section_body
@@ -66,21 +73,50 @@ def atribuicao_e_copia(lista_atribcopia):
                 data_section_body += f'\t{lista_atribcopia[0]}: .word32 {valor}\n'
 
 def operacao_aritm(operacao):
-    global data_section_body
-    global data_section_header
-    global code_section_body
+    global data_section_body, code_section_body, data_section_header, label_valor1_mult, label_valor2_mult
     
     if operacao[0] not in dic_var_valor:
-        if operacao[3] == '+':  
-            data_section_header += f'\t{operacao[0]}: .space 4\n'
-            code_section_body += f'\taddi $t1, $t0, #{operacao[2]}\n'
-            code_section_body += f'\taddi $t2, $t1, #{operacao[4]}\n'
-            code_section_body += f'\tsw $t2, {operacao[0]}(r0)\n'
+        data_section_header += f'\t{operacao[0]}: .space 4\n'
+
+    if operacao[3] == '+': #adição  
+        code_section_body += f'\taddi $t1, $t0, #{operacao[2]}\n'
+        code_section_body += f'\taddi $t2, $t1, #{operacao[4]}\n\n'
+        code_section_body += f'\tsw $t2, {operacao[0]}(r0)\n\n'
+        temp = executa_operacao_aritmetica(operacao[2], operacao[4], operacao[3])
+        dic_var_valor[operacao[0]] = temp
+    elif operacao[3] == '*':  # multiplicação
+        if 'LM1:' not in data_section_body:  # se não tiver LM1 não tem LM2 
+            label_valor1_mult += f'{operacao[2]}'
+            label_valor2_mult += f'{operacao[4]}'
+            data_section_body += f'{label_valor1_mult}\n{label_valor2_mult}\n'
+        else:  # se já tiver acontecido outra multiplicação no programa
+                lines = data_section_body.split('\n')
+                for i, line in enumerate(lines):
+                    if 'LM1:' in line:
+                        parts = line.split()
+                        if len(parts) > 1:
+                            parts[-1] = operacao[2]
+                        else:
+                            parts.append(operacao[2])
+                        lines[i] = '\t' + ' '.join(parts)
+                    elif 'LM2:' in line:
+                        parts = line.split()
+                        if len(parts) > 1:
+                            parts[-1] = operacao[4]
+                        else:
+                            parts.append(operacao[4])
+                        lines[i] = '\t' + ' '.join(parts)
+                data_section_body = '\n'.join(lines)  # Devolução da nova string para a string original
             
-            temp = executa_operacao_aritmetica(operacao[2], operacao[4], operacao[2])
-            dic_var_valor[operacao[0]] = temp
-
-
+        code_section_body += f'\tlw $t0, LM1(r0)\n'
+        code_section_body += f'\tlw $t1, LM2(r0)\n\n'
+        code_section_body += f'\tmult $t0, $t1\n'
+        code_section_body += f'\tmflo $t0\n\n'
+        code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n\n'
+        code_section_body += f'\t;;;;;;;;;\n\n'
+        dic_var_valor[operacao[0]] = executa_operacao_aritmetica(operacao[2], operacao[4], operacao[3])
+            
+                
 def main(argv):
     global data_section_header
     # Captura o nome do arquivo de entrada
@@ -90,10 +126,12 @@ def main(argv):
 
     for l in linhas: 
         print(l)
-        # se for igual a 3 é uma atribuição ou cópia
+        #Se for igual a 3 é uma atribuição ou cópia
         if len(l) == 3:
             atribuicao_e_copia(l)
+        #Se for uma operação aritmética
         elif len(l) > 3 and '=' in l:
+            print(l)
             operacao_aritm(l)        
         
 
