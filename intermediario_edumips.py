@@ -7,25 +7,39 @@ code_section_header = f'\n.code\n'
 data_section_body = ""         
 code_section_body = ""
 
-label_valor1_mult = f'\tLM1: .word32 '
-label_valor2_mult = f'\tLM2: .word32 '
+label = ''
+count_label = 0
+# label_valor1_sub = f'\tLT1: .word32 '
+# label_valor2_sub = f'\tLT2: .word32 '
 
 
 dic_var_valor = {}
 
+def nova_label():
+    global count_label, label
+    count_label += 1
+    label = f'\tLT{count_label}: .word32'
+    return label
+
 # trata o arquivo 3 endereços
 def parse_input_file(arquivo_tres_enderecos): 
     # Define a expressão regular que considera operadores e números como tokens separados
-    pattern = re.compile(r'(\b\w+\b|[=+\-*/])')
+    padrao = re.compile(r'(\b\w+\b|[=+\-*/])')
     with open(arquivo_tres_enderecos,'r') as f:
-        linhas = [pattern.findall(linha.strip().lower()) for linha in f.readlines() if linha.strip() != ""]
+        linhas = [padrao.findall(linha.strip().lower()) for linha in f.readlines() if linha.strip() != ""]
     return linhas
 
 def executa_operacao_aritmetica(operando1, operando2, operador):
     match operador:
         case '+':
-            print("fff")
-            return int(operando1) + int(operando2)
+            return str(int(operando1) + int(operando2))
+        case '*':
+            return str(int(operando1) * int(operando2))
+        case '-':
+            return str(int(operando1) - int(operando2))
+        case '/':
+            return str(round(int(operando1) / int(operando2)))
+        
         
 #Função que trata as operações de atribuição de cópia
 def atribuicao_e_copia(lista_atribcopia):
@@ -77,44 +91,76 @@ def operacao_aritm(operacao):
     
     if operacao[0] not in dic_var_valor:
         data_section_header += f'\t{operacao[0]}: .space 4\n'
+    
+    if operacao[2] in dic_var_valor:
+        valor_1 = dic_var_valor[operacao[2]]
+    elif operacao[2] not in dic_var_valor:
+        valor_1 = operacao[2]
 
-    if operacao[3] == '+': #adição  
-        code_section_body += f'\taddi $t1, $t0, #{operacao[2]}\n'
-        code_section_body += f'\taddi $t2, $t1, #{operacao[4]}\n\n'
-        code_section_body += f'\tsw $t2, {operacao[0]}(r0)\n\n'
-        temp = executa_operacao_aritmetica(operacao[2], operacao[4], operacao[3])
+    if operacao[4] in dic_var_valor:
+        valor_2 = dic_var_valor[operacao[4]]
+    elif operacao[4] not in dic_var_valor:
+        valor_2 = operacao[4]
+
+    if operacao[3] == '+': #adição
+        if operacao[2] not in dic_var_valor and operacao[4] not in dic_var_valor: #Significa que os valores são imediatos
+            code_section_body += f'\t;soma de dois imediatos\n'
+            code_section_body += f'\taddi t0, $t0, #{valor_1}\n'
+            code_section_body += f'\taddi $t1, $t0, #{valor_2}\n'
+            code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n\n'    
+        elif operacao[2] in dic_var_valor and operacao[4] not in dic_var_valor:
+            code_section_body += f'\t;soma com uma variável\n'
+            code_section_body += f'\tlw $t0, {operacao[2]}(r0)\n'
+            code_section_body += f'\taddi $t1, $t0, #{valor_2}\n'
+            code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n\n'
+        elif operacao[4] in dic_var_valor and operacao[2] not in dic_var_valor:
+            code_section_body += f'\t;soma com uma outra variável\n'
+            code_section_body += f'\tlw $t0, {operacao[4]}(r0)\n'
+            code_section_body += f'\taddi $t1, $t0, #{valor_1}\n'
+            code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n\n'
+        elif operacao[2] in dic_var_valor and operacao[4] in dic_var_valor:
+            code_section_body += f'\t;soma com duas variáveis\n'
+            code_section_body += f'\tlw $t0, {operacao[2]}(r0)\n'
+            code_section_body += f'\tlw $t1, {operacao[4]}(r0)\n'
+            code_section_body += f'\tadd $t0, $t0, $t1\n'
+            code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n\n'
+        temp = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
         dic_var_valor[operacao[0]] = temp
-    elif operacao[3] == '*':  # multiplicação
-        if 'LM1:' not in data_section_body:  # se não tiver LM1 não tem LM2 
-            label_valor1_mult += f'{operacao[2]}'
-            label_valor2_mult += f'{operacao[4]}'
-            data_section_body += f'{label_valor1_mult}\n{label_valor2_mult}\n'
-        else:  # se já tiver acontecido outra multiplicação no programa
-                lines = data_section_body.split('\n')
-                for i, line in enumerate(lines):
-                    if 'LM1:' in line:
-                        parts = line.split()
-                        if len(parts) > 1:
-                            parts[-1] = operacao[2]
-                        else:
-                            parts.append(operacao[2])
-                        lines[i] = '\t' + ' '.join(parts)
-                    elif 'LM2:' in line:
-                        parts = line.split()
-                        if len(parts) > 1:
-                            parts[-1] = operacao[4]
-                        else:
-                            parts.append(operacao[4])
-                        lines[i] = '\t' + ' '.join(parts)
-                data_section_body = '\n'.join(lines)  # Devolução da nova string para a string original
-            
-        code_section_body += f'\tlw $t0, LM1(r0)\n'
-        code_section_body += f'\tlw $t1, LM2(r0)\n\n'
-        code_section_body += f'\tmult $t0, $t1\n'
-        code_section_body += f'\tmflo $t0\n\n'
-        code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n\n'
-        code_section_body += f'\t;;;;;;;;;\n\n'
-        dic_var_valor[operacao[0]] = executa_operacao_aritmetica(operacao[2], operacao[4], operacao[3])
+
+    
+    elif operacao[3] == '*' or operacao[3] == '/' or operacao[3] == '-':  # multiplicação
+        if operacao[3] == '*':
+            data_section_body += f'{nova_label()} {valor_1}\n'
+            code_section_body += f'\tlw $t0, LT{count_label}(r0)\n'
+            data_section_body += f'{nova_label()} {valor_2}\n' 
+            code_section_body += f'\tlw $t1, LT{count_label}(r0)\n'
+            code_section_body += f'\tmult $t0, $t1\n'
+            code_section_body += f'\tmflo $t0\n'
+            code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n\n'
+            code_section_body += f'\t;;;;;;;;;\n\n'
+            dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
+        elif operacao[3] == '/':
+            data_section_body += f'{nova_label()} {valor_1}\n'
+            code_section_body += f'\t;divisao\n'
+            code_section_body += f'\tlw $t0, LT{count_label}(r0)\n'
+            data_section_body += f'{nova_label()} {valor_2}\n'
+            code_section_body += f'\tlw $t1, LT{count_label}(r0)\n'
+            code_section_body += f'\tdiv $t1, $t2\n'
+            code_section_body += f'\tmflo $t0\n'
+            code_section_body += f'\t;;;;;;;;;\n\n'
+            dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
+        elif operacao[3] == '-':
+            data_section_body += f'{nova_label()} {valor_1}\n'
+            code_section_body += f'\t;subtracao\n'
+            code_section_body += f'\tlw $t0, LT{(count_label)}(r0)\n'
+            data_section_body += f'{nova_label()} {valor_2}\n'
+            code_section_body += f'\tlw $t1, LT{count_label}(r0)\n'
+            code_section_body += f'\tsub $t0, $t0, $t1\n'
+            code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n\n'
+            dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
+
+
+        
             
                 
 def main(argv):
