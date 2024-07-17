@@ -1,5 +1,9 @@
-e = 2 / 1
-k = e * 3
-i = k - e
+a = 10
+b = 50
 
+if a < b goto L1 
+goto L2
+L1: a = 1 + 6
+L2: f = 1 + 1
+s = 2 + 2
 

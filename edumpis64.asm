@@ -1,33 +1,35 @@
 .data
-	e: .space 4
-	k: .space 4
-	i: .space 4
-	LT1: .word32 2
-	LT2: .word32 1
-	LT3: .word32 2
-	LT4: .word32 3
-	LT5: .word32 6
-	LT6: .word32 2
+	a: .word32 10
+	b: .word32 50
+	f: .space 4
+	s: .space 4
 
 .code
-	;divisao
-	lw $t0, LT1(r0)
-	lw $t1, LT2(r0)
-	div $t1, $t2
-	mflo $t0
-	;;;;;;;;;
+	lw $t5, a(r0)
+	lw $t6, b(r0)
+	slt $t7, $t5, $t6
+	BEQZ $t7, L2
+L1:
+	;soma de dois imediatos
+	addi $t0, $zero, #1
+	addi $t1, $t0, #6
+	sw $t1, a(r0)
+	add $t0, $zero, $zero
+	add $t1, $zero, $zero
 
-	lw $t0, LT3(r0)
-	lw $t1, LT4(r0)
-	mult $t0, $t1
-	mflo $t0
-	sw $t0, k(r0)
+L2:
+	;soma de dois imediatos
+	addi $t0, $zero, #1
+	addi $t1, $t0, #1
+	sw $t1, f(r0)
+	add $t0, $zero, $zero
+	add $t1, $zero, $zero
 
-	;;;;;;;;;
+	;soma de dois imediatos
+	addi $t0, $zero, #2
+	addi $t1, $t0, #2
+	sw $t1, s(r0)
+	add $t0, $zero, $zero
+	add $t1, $zero, $zero
 
-	;subtracao
-	lw $t0, LT5(r0)
-	lw $t1, LT6(r0)
-	sub $t0, $t0, $t1
-	sw $t1, i(r0)
-
+	SYSCALL 0
