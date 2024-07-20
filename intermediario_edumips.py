@@ -4,7 +4,7 @@ import re
 
 '''
 problemas:
-        - repetição da mesma linha: de store e load
+        - Pensar numa maneira mais inteligente de criar as labels do controle de fluxo
 '''
 
 data_section_header = f'.data\n' #Cabeçalho da seção data
@@ -222,6 +222,11 @@ def controle_de_fluxo(condicao):
         then_label, else_label, end_if_label = gerar_labels_unicos_controle_fluxo()
         print(then_label,else_label,end_if_label)
         pilha_labels_controle_fluxo.append((then_label, else_label, end_if_label))
+        
+        '''
+            Trata as operações possíveis do código de 3 endereços
+            <, <=, == e >=
+        '''
         if condicao[0][2] == '<':
             if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
                 code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
@@ -286,69 +291,66 @@ def controle_de_fluxo(condicao):
             code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
         
         
-        code_section_body += f'{condicao[2][0]}:\n'
+        code_section_body += f'{condicao[2][0]}:\n' #Label then
         
-        if condicao[1][1] != end_if_label:
-            i = 0
-            j = 0
+        if condicao[1][1] != end_if_label: #Se o bloco if tiver um else
+            i = 0 #Contador para percorrer o bloco then
+            j = 0 #Contador para percorrer o bloco else
             indice_then = condicao.index([then_label])
             indice_else = condicao.index([else_label])
             print(indice_then,indice_else)
-            bloco_then = condicao[indice_then+1:indice_else-1]
             
-            bloco_else = condicao[indice_else + 1:-1]
+            bloco_then = condicao[indice_then+1:indice_else-1] #Captura somente o código dentro do bloco then
+            bloco_else = condicao[indice_else + 1:-1] #Captura somente o código dentro do bloco else
+            
             print(bloco_then)
             print(bloco_else)
             
-            while i < len(bloco_then):
+            while i < len(bloco_then): #Trata o código do bloco then
                 if 'if' in bloco_then[i][0]: #se for um if
-                    controle_de_fluxo(bloco_then)
-                    #nivel += 1
+                    controle_de_fluxo(bloco_then) #Chamada recursiva
                     i += len(bloco_then)+1
-                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #se for uma operação aritmética
+                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #Se for uma operação aritmética
                     operacao_aritm(bloco_then[i])
                     i += 1
-                elif len(bloco_then[i]) == 3:
+                elif len(bloco_then[i]) == 3: #Se for uma atribuição ou cópia
                     atribuicao_e_copia(bloco_then[i])
                     i += 1
-            code_section_body += f'\tj {end_if_label}\n'
-            code_section_body += f'{else_label}:\n'
+            code_section_body += f'\tj {end_if_label}\n' #Salto incondicional
+            code_section_body += f'{else_label}:\n' #label else
             
-            while j < len(bloco_else):
-                if 'if' in bloco_else[j][0]: #se for um if
-                    print("opa")
-                    controle_de_fluxo(bloco_else)
-                    #nivel += 1
+            while j < len(bloco_else): #Trata o código do bloco else
+                if 'if' in bloco_else[j][0]: #Se for um if
+                    controle_de_fluxo(bloco_else) #Chamada recursiva
                     j += len(bloco_else)+1
-                elif len(bloco_else[j]) > 3 and bloco_else[j][3] in ['+','-','*','/']: #se for uma operação aritmética
+                elif len(bloco_else[j]) > 3 and bloco_else[j][3] in ['+','-','*','/']: #Se for uma operação aritmética
                     operacao_aritm(bloco_else[j])
                     j += 1
-                elif len(bloco_else[j]) == 3:
+                elif len(bloco_else[j]) == 3: #Se for uma atribuição ou cópia
                     atribuicao_e_copia(bloco_else[j])
                     j += 1
             
             code_section_body += f'{end_if_label}:\n'
          
-        else:
-            i = 0
+        else: #Caso o bloco if não tenha um else
+            i = 0 #Contador para percorrer o bloco then
             indic = condicao.index([f'{then_label}'])
-            print(indic)
             print(f'Bloco then: {condicao[indic+1:-1]}')
             bloco_then = condicao[indic+1:-1]
             while i < len(bloco_then):
-                if 'if' in bloco_then[i][0]: #se for um if
-                    controle_de_fluxo(bloco_then)
+                if 'if' in bloco_then[i][0]: #Se for um if
+                    controle_de_fluxo(bloco_then) #Chamada recursiva
                     i += len(bloco_then)+1
-                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #se for uma operação aritmética
+                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #Se for uma operação aritmética
                     operacao_aritm(bloco_then[i])
                     i += 1
-                elif len(bloco_then[i]) == 3:
+                elif len(bloco_then[i]) == 3: #Se for uma atribuição ou cópia
                     atribuicao_e_copia(bloco_then[i])
                     i += 1
             
 
             code_section_body += f'{end_if_label}:\n'
-            pilha_labels_controle_fluxo.pop()
+            pilha_labels_controle_fluxo.pop() #Pop na pilha
 
         
         
