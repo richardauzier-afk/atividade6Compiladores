@@ -2,23 +2,27 @@ import sys
 import re
 
 
-'''problemas:
+'''
+problemas:
         - repetição da mesma linha: de store e load
 '''
 
-data_section_header = f'.data\n' #string que só vai ser concatenada quando a data_section estiver pronta
-code_section_header = f'\n.code\n'
-data_section_body = ""         
-code_section_body = ""
+data_section_header = f'.data\n' #Cabeçalho da seção data
+code_section_header = f'\n.code\n' #Cabeçalho da seção code
+data_section_body = ""  #Código edumips64 da seção data       
+code_section_body = "" #Código edumips63 da seção code
 
-label = ''
-label_end_if = ''
-count_label = 0
-count_end_if = 0
-dic_var_valor = {}
-contador_label = 0
+label_op_mult_div_sub = '' #Essas operações obrigam os operandos estarem em memória
+count_label_op_mult_div_sub = 0 #Contador para gerar labels únicas
+label_end_if = '' #Label para identificar o fim de um bloco if
+count_end_if = 0 #Contador para gerar labels únicas
+dic_var_valor = {} #Dicionário para guardar o valor das operações nas respectivas variáveis
+contador_label_controle_fluxo = 0 #Contador para gerar labels únicas no controle de fluxo 
+pilha_labels_controle_fluxo = [] #Estrutura para guardar as labels do controle de fluxo 
+
 
 def eh_inteiro(s):
+    #Função para indetificar se uma string pode ou não virar um inteiro
     try:
         int(s)
         return True
@@ -26,41 +30,37 @@ def eh_inteiro(s):
         return False
 
 def nova_label():
-    global count_label, label
+    #Função que gera as labels para as operações de multiplicação, divisão, subtração
+    global count_label, label_op_mult_div_sub
     count_label += 1
-    label = f'\tLT{count_label}: .word32'
-    return label
+    label_op_mult_div_sub = f'\tLT{count_label}: .word32'
+    return label_op_mult_div_sub
 
 def nova_label_end_if():
+    #Função que gera as labels para o fim de um bloco if
     global count_end_if, label_end_if
     label_end_if = f'end_if{count_end_if}'
     count_end_if += 1
     return label_end_if
 
-pilha_labels = []
-
-def gerar_labels_unicos():
-    global contador_label
-    then_label = f'then{contador_label}'
-    else_label = f'else{contador_label}'
-    end_if_label = f'end_if{contador_label}'
-    contador_label += 1
+def gerar_labels_unicos_controle_fluxo():
+    #Função que gera as labels no contexto de controle fluxo
+    global contador_label_controle_fluxo
+    then_label = f'then{contador_label_controle_fluxo}'
+    else_label = f'else{contador_label_controle_fluxo}'
+    end_if_label = f'end_if{contador_label_controle_fluxo}'
+    contador_label_controle_fluxo += 1
     return then_label, else_label, end_if_label
 
-
-
 def parse_input_file(arquivo_tres_enderecos):
+    #Função que trata o arquivo
     # Define a expressão regular que considera ==, operadores e números como tokens separados
     padrao = re.compile(r'>=|<=|==|\b\w+\b|[=+\-*/<]')
-
-
     with open(arquivo_tres_enderecos, 'r') as f:
         linhas = [padrao.findall(linha.strip()) for linha in f.readlines() if linha.strip() != ""]
-
     return linhas
 
  
-
 def executa_operacao_aritmetica(operando1, operando2, operador):
     match operador:
         case '+':
@@ -73,12 +73,14 @@ def executa_operacao_aritmetica(operando1, operando2, operador):
             return str(round(int(operando1) / int(operando2)))
         
         
-#Função que trata as operações de atribuição de cópia
 def atribuicao_e_copia(lista_atribcopia):
+    #Função que trata as operações de atribuição e de cópia
     global data_section_body
     
-    #caso uma variável que já exista esteja recebendo outra atribuição
-    #é preciso procurar pela sua definição no .data e substituir pelo novo valor
+    '''
+        Caso uma variável que já exista esteja recebendo outra atribuição
+        é preciso procurar pela sua definição no .data e substituir pelo novo valor
+    '''
     if lista_atribcopia[0] in dic_var_valor:
         pattern = rf'^{re.escape(lista_atribcopia[0])}'
         # Dividir a string em linhas e verificar cada linha
@@ -95,7 +97,7 @@ def atribuicao_e_copia(lista_atribcopia):
                     valor = dic_var_valor[lista_atribcopia[-1]]
                     parts[-1] = valor
                     dic_var_valor[lista_atribcopia[0]] = valor 
-                #caso seja uma variável recebendo um número
+                #Caso seja uma variável recebendo um número
                 else:
                     parts[-1] = lista_atribcopia[-1]
                     dic_var_valor[lista_atribcopia[0]] = lista_atribcopia[-1]
@@ -119,11 +121,19 @@ def atribuicao_e_copia(lista_atribcopia):
                 data_section_body += f'\t{lista_atribcopia[0]}: .word32 {valor}\n'
 
 def operacao_aritm(operacao):
+    #Função que trata as operações aritméticas
     global data_section_body, code_section_body, data_section_header
     
+    '''
+        Caso a variável não tenha sido inicializada através de atribuição
+        é preciso definir um espaço em branco na memória do edumips64
+    '''
     if operacao[0] not in dic_var_valor:
         data_section_body += f'\t{operacao[0]}: .space 4\n'
 
+    '''
+        Recupera os valores, tanto os valores que as varíaveis guardam quanto um imediato
+    '''
     if operacao[2] in dic_var_valor:
         valor_1 = dic_var_valor[operacao[2]]
     elif operacao[2] not in dic_var_valor:
@@ -143,19 +153,19 @@ def operacao_aritm(operacao):
             code_section_body += f'\tsw $t1, {operacao[0]}(r0)\n'
             code_section_body += f'\tadd $t0, $zero, $zero\n'
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'    
-        elif operacao[2] in dic_var_valor and operacao[4] not in dic_var_valor:
+        elif operacao[2] in dic_var_valor and operacao[4] not in dic_var_valor: #O primeiro é imediato e o outro não
             code_section_body += f'\t;soma com uma variável\n'
             code_section_body += f'\tlw $t0, {operacao[2]}(r0)\n'
             code_section_body += f'\taddi $t0, $t0, #{valor_2}\n'
             code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n'
             code_section_body += f'\tadd $t0, $zero, $zero\n\n'
-        elif operacao[4] in dic_var_valor and operacao[2] not in dic_var_valor:
+        elif operacao[4] in dic_var_valor and operacao[2] not in dic_var_valor: #O segundo é imediato e o primeiro não
             code_section_body += f'\t;soma com uma outra variável\n'
             code_section_body += f'\tlw $t0, {operacao[4]}(r0)\n'
             code_section_body += f'\taddi $t0, $t0, #{valor_1}\n'
             code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n'
             code_section_body += f'\tadd $t0, $zero, $zero\n\n'
-        elif operacao[2] in dic_var_valor and operacao[4] in dic_var_valor:
+        elif operacao[2] in dic_var_valor and operacao[4] in dic_var_valor: #Os dois são variáveis
             code_section_body += f'\t;soma com duas variáveis\n'
             code_section_body += f'\tlw $t0, {operacao[2]}(r0)\n'
             code_section_body += f'\tlw $t1, {operacao[4]}(r0)\n'
@@ -164,11 +174,11 @@ def operacao_aritm(operacao):
             code_section_body += f'\tadd $t0, $zero, $zero\n'
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'
         temp = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
-        dic_var_valor[operacao[0]] = temp
+        dic_var_valor[operacao[0]] = temp #Atualiza o valor variável que recebeu a operação de adição
 
     
-    elif operacao[3] == '*' or operacao[3] == '/' or operacao[3] == '-':  # multiplicação
-        if operacao[3] == '*':
+    elif operacao[3] == '*' or operacao[3] == '/' or operacao[3] == '-':  # multiplicação, divisão ou subtração
+        if operacao[3] == '*': #Multiplicação
             data_section_body += f'{nova_label()} {valor_1}\n'
             code_section_body += f'\tlw $t0, LT{count_label}(r0)\n'
             data_section_body += f'{nova_label()} {valor_2}\n' 
@@ -179,7 +189,7 @@ def operacao_aritm(operacao):
             code_section_body += f'\tadd $t0, $zero, $zero\n'
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
-        elif operacao[3] == '/': # divisão
+        elif operacao[3] == '/': #Divisão
             data_section_body += f'{nova_label()} {valor_1}\n'
             code_section_body += f'\t;divisao\n'
             code_section_body += f'\tlw $t0, LT{count_label}(r0)\n'
@@ -191,7 +201,7 @@ def operacao_aritm(operacao):
             code_section_body += f'\tadd $t0, $zero, $zero\n'
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
-        elif operacao[3] == '-': # subtração
+        elif operacao[3] == '-': #Subtração
             data_section_body += f'{nova_label()} {valor_1}\n'
             code_section_body += f'\t;subtracao\n'
             code_section_body += f'\tlw $t0, LT{(count_label)}(r0)\n'
@@ -203,113 +213,15 @@ def operacao_aritm(operacao):
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
 
-'''
+
 def controle_de_fluxo(condicao):
     global code_section_body
-    
+    global pilha_labels_controle_fluxo
+
     if condicao[0][0] == 'if':
-        if condicao[0][2] == '<':
-            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
-            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
-            else:
-                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            code_section_body += f'\tBEQZ $t7, {condicao[1][1]}\n'
-        elif condicao[0][2] == '==':
-            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
-              code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
-              code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
-            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
-                code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
-            else:
-                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-            code_section_body += f'\tBNE $t5, $t6, {condicao[1][1]}\n'
-        elif condicao[0][2] == '<=':
-            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
-            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
-                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
-            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
-                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            else:
-                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
-        elif condicao[0][2] == '>=':
-            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
-            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
-                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
-                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
-            else:
-                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
-                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
-                code_section_body += f'\tslt $t7, $t7, $t6\n'
-            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
-        
-        code_section_body += f'{condicao[2][0]}:\n'
-        
-        if condicao[1][1] != 'end_if':
-            indice = condicao[3:].index(['else'])
-            print(condicao[3:3+indice-1])
-            for l in condicao[3:3+indice-1]:
-                if l[3] in ['+','-','*','/']:
-                    operacao_aritm(l)
-                #se for um if chama a funcao recursivamente
-            code_section_body += f'\tj end_if\n\n'
-            code_section_body += f'else:\n'
-            print(condicao[3+indice+1:-1])
-            for l1 in condicao[3+indice+1:-1]:
-                print(l1)
-                if l1[3] in ['+','-','*','/']:
-                    operacao_aritm(l1)
-                #se for um if chama a funcao recursivamente
-            code_section_body += f'end_if:\n'
-        else:
-            for l in condicao[3:-1]:
-                if l[3] in ['+','-','*','/']:
-                    operacao_aritm(l)
-                #se for um if chama a funcao recursivamente
-            code_section_body += f'end_if:\n'
-
-'''
-def controle_de_fluxo(condicao):
-    global code_section_body
-    global pilha_labels
-
-    #end_if_label = f'end_if{nivel}'
-    #then_label = f'then{nivel}'
-    #else_label = f'else{nivel}'
-
-    
-    if condicao[0][0] == 'if':
-        then_label, else_label, end_if_label = gerar_labels_unicos()
+        then_label, else_label, end_if_label = gerar_labels_unicos_controle_fluxo()
         print(then_label,else_label,end_if_label)
-        pilha_labels.append((then_label, else_label, end_if_label))
+        pilha_labels_controle_fluxo.append((then_label, else_label, end_if_label))
         if condicao[0][2] == '<':
             if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
                 code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
@@ -418,7 +330,6 @@ def controle_de_fluxo(condicao):
             code_section_body += f'{end_if_label}:\n'
          
         else:
-            print("cabras")
             i = 0
             indic = condicao.index([f'{then_label}'])
             print(indic)
@@ -437,7 +348,7 @@ def controle_de_fluxo(condicao):
             
 
             code_section_body += f'{end_if_label}:\n'
-            pilha_labels.pop()
+            pilha_labels_controle_fluxo.pop()
 
         
         
@@ -446,18 +357,16 @@ def main(argv):
     global data_section_header
     global code_section_body
     
-    i = 0
+    i = 0 #Contador para gerenciar o caminhar pela lista de linhas
     # Captura o nome do arquivo de entrada
     input_file = argv[1]
 
     linhas = parse_input_file(input_file) #Trata o arquivo
     print(linhas)
-    print(f'Tamanho da string: {len(linhas)}')
     
-    
-    while i < len(linhas):
+    while i < len(linhas): #Irá percorrer as linhas e tratar cada caso
+        #Se for uma atribuição ou cópia
         if len(linhas[i]) == 3:
-
             atribuicao_e_copia(linhas[i])
             i += 1
         #Se for uma operação aritmética
@@ -465,22 +374,23 @@ def main(argv):
             operacao_aritm(linhas[i])
             i += 1
         elif ''.join(linhas[i]).startswith('if'): #se for um if
-            end_if = nova_label_end_if()
+            end_if = nova_label_end_if() #Label que delimita o fim de um bloco if
             indice = linhas[i:].index([end_if]) #{linhas[i+1][1]}
             print("Lá da main: ",linhas[i:indice+i+1])
             controle_de_fluxo(linhas[i:indice+i+1])
             i += indice 
-            
+        #Qualquer outra linha que não se encaixa    
         else:
             i += 1
         
 
-    code_section_body += f'\tSYSCALL 0\n'
-    data_section_header += data_section_body + code_section_header + code_section_body #concatena as operações com a string '.data'
+    code_section_body += f'\tSYSCALL 0\n' #Fim do código edumips64
+    data_section_header += data_section_body + code_section_header + code_section_body #concatena tudo
     
-    save_to_file("edumpis64.asm")
+    save_to_file("edumpis64.asm") #Salva a string em um arquivo
 
 def save_to_file(filename):
+    #Função para salvar o código edumips64 em um arquivo
         with open(filename, 'w') as f:
             f.write(''.join(data_section_header))  
        

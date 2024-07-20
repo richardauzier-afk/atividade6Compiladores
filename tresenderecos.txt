@@ -1,18 +1,13 @@
-b = 2
-c = 4
-
 main:
+    a = 25
+    b = 30
     
-    if a >= 9 goto then0 
-    goto end_if0
-    then0:
-        if a == b goto then1
-        goto end_if1
-        then1:
-            b = 3 + 2
-        end_if1:
-    end_if0:
-
+    goto check
+    loop: 
+        a = 3 + 2
+    check: 
+        if a < b goto loop
+    end:
 
 
 
