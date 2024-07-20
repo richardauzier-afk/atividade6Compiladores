@@ -4,7 +4,7 @@ main:
     
     goto check
     loop: 
-        a = 3 + 2
+        
     check: 
         if a < b goto loop
     end:
