@@ -1,9 +1,21 @@
-a = 10
-b = 50
+b = 2
+c = 4
 
-if a < b goto L1 
-goto L2
-L1: a = 1 + 6
-L2: f = 1 + 1
-s = 2 + 2
+main:
+    
+    if a >= 9 goto then0 
+    goto end_if0
+    then0:
+        if a == b goto then1
+        goto end_if1
+        then1:
+            b = 3 + 2
+        end_if1:
+    end_if0:
+
+
+
+
+
+
 

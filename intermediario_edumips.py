@@ -2,8 +2,7 @@ import sys
 import re
 
 
-'''
-    problemas:
+'''problemas:
         - repetição da mesma linha: de store e load
 '''
 
@@ -13,10 +12,18 @@ data_section_body = ""
 code_section_body = ""
 
 label = ''
+label_end_if = ''
 count_label = 0
-
-
+count_end_if = 0
 dic_var_valor = {}
+contador_label = 0
+
+def eh_inteiro(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
 
 def nova_label():
     global count_label, label
@@ -24,13 +31,21 @@ def nova_label():
     label = f'\tLT{count_label}: .word32'
     return label
 
-'''
-def novo_temp():
-    global count_temp
-    if count_temp <= 9:
-        count_temp += 1
-        return f'$t{count_temp-1} '
-''' 
+def nova_label_end_if():
+    global count_end_if, label_end_if
+    label_end_if = f'end_if{count_end_if}'
+    count_end_if += 1
+    return label_end_if
+
+pilha_labels = []
+
+def gerar_labels_unicos():
+    global contador_label
+    then_label = f'then{contador_label}'
+    else_label = f'else{contador_label}'
+    end_if_label = f'end_if{contador_label}'
+    contador_label += 1
+    return then_label, else_label, end_if_label
 
 
 
@@ -43,6 +58,7 @@ def parse_input_file(arquivo_tres_enderecos):
         linhas = [padrao.findall(linha.strip()) for linha in f.readlines() if linha.strip() != ""]
 
     return linhas
+
  
 
 def executa_operacao_aritmetica(operando1, operando2, operador):
@@ -121,9 +137,6 @@ def operacao_aritm(operacao):
 
     if operacao[3] == '+': #adição
         if operacao[2] not in dic_var_valor and operacao[4] not in dic_var_valor: #Significa que os valores são imediatos
-            #temp1 = novo_temp()
-            #temp2 = novo_temp()
-            #print(temp1, temp2)
             code_section_body += f'\t;soma de dois imediatos\n'
             code_section_body += f'\taddi $t0, $zero, #{valor_1}\n'
             code_section_body += f'\taddi $t1, $t0, #{valor_2}\n'
@@ -131,8 +144,6 @@ def operacao_aritm(operacao):
             code_section_body += f'\tadd $t0, $zero, $zero\n'
             code_section_body += f'\tadd $t1, $zero, $zero\n\n'    
         elif operacao[2] in dic_var_valor and operacao[4] not in dic_var_valor:
-            #temp1 = novo_temp()
-            #temp2 = novo_temp()
             code_section_body += f'\t;soma com uma variável\n'
             code_section_body += f'\tlw $t0, {operacao[2]}(r0)\n'
             code_section_body += f'\taddi $t0, $t0, #{valor_2}\n'
@@ -166,8 +177,7 @@ def operacao_aritm(operacao):
             code_section_body += f'\tmflo $t0\n'
             code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n'
             code_section_body += f'\tadd $t0, $zero, $zero\n'
-            code_section_body += f'\tadd $t1, $zero, $zero\n'
-            code_section_body += f'\t;;;;;;;;;\n'
+            code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
         elif operacao[3] == '/': # divisão
             data_section_body += f'{nova_label()} {valor_1}\n'
@@ -179,8 +189,7 @@ def operacao_aritm(operacao):
             code_section_body += f'\tmflo $t0\n'
             code_section_body += f'sw $t0, {operacao[0]}(r0)'
             code_section_body += f'\tadd $t0, $zero, $zero\n'
-            code_section_body += f'\tadd $t1, $zero, $zero\n'
-            code_section_body += f'\t;;;;;;;;;\n'
+            code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
         elif operacao[3] == '-': # subtração
             data_section_body += f'{nova_label()} {valor_1}\n'
@@ -191,82 +200,279 @@ def operacao_aritm(operacao):
             code_section_body += f'\tsub $t0, $t0, $t1\n'
             code_section_body += f'\tsw $t0, {operacao[0]}(r0)\n'
             code_section_body += f'\tadd $t0, $zero, $zero\n'
-            code_section_body += f'\tadd $t1, $zero, $zero\n'
+            code_section_body += f'\tadd $t1, $zero, $zero\n\n'
             dic_var_valor[operacao[0]] = executa_operacao_aritmetica(valor_1, valor_2, operacao[3])
 
+'''
 def controle_de_fluxo(condicao):
     global code_section_body
-    if condicao[0] == 'if' or (condicao[0] == 'goto' and condicao[1] != 'end_if'):
-        if condicao[0] == 'goto':
-            code_section_body += f'{condicao[1]}\n'
-        elif condicao[2] == '<':
-            code_section_body += f'\tlw $t5, {condicao[1]}(r0)\n'
-            code_section_body += f'\tlw $t6, {condicao[3]}(r0)\n'
-            code_section_body += f'\tslt $t7, $t5, $t6\n'
-            code_section_body += f'\tBEQZ $t7, '
-        elif condicao[2] == '==':
-          code_section_body += f'\tlw $t5, {condicao[1]}(r0)\n'
-          code_section_body += f'\tlw $t6, {condicao[3]}(r0)\n'
-          code_section_body += f'\tBNE $t5, $t6, '
-        elif condicao[2] == '<=':
-            code_section_body += f'\tlw $t5, {condicao[1]}(r0)\n'
-            code_section_body += f'\tlw $t6, {condicao[3]}(r0)\n'
-            code_section_body += f'\tslt $t7, $t6, $t5\n'
-            code_section_body += f'\tBNEZ $t7, '
-        elif condicao[2] == '>=':
-            code_section_body += f'\tlw $t5, {condicao[1]}(r0)\n'
-            code_section_body += f'\tlw $t6, {condicao[3]}(r0)\n'
-            code_section_body += f'\tslt $t7, $t5, $t6\n'
-            code_section_body += f'\tBNEZ $t7, '
+    
+    if condicao[0][0] == 'if':
+        if condicao[0][2] == '<':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBEQZ $t7, {condicao[1][1]}\n'
+        elif condicao[0][2] == '==':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+              code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
+              code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
+                code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+            code_section_body += f'\tBNE $t5, $t6, {condicao[1][1]}\n'
+        elif condicao[0][2] == '<=':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
+            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
+                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
+            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
+        elif condicao[0][2] == '>=':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not(eh_inteiro(condicao[0][3])):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            elif not(eh_inteiro(condicao[0][1])) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
+        
+        code_section_body += f'{condicao[2][0]}:\n'
+        
+        if condicao[1][1] != 'end_if':
+            indice = condicao[3:].index(['else'])
+            print(condicao[3:3+indice-1])
+            for l in condicao[3:3+indice-1]:
+                if l[3] in ['+','-','*','/']:
+                    operacao_aritm(l)
+                #se for um if chama a funcao recursivamente
+            code_section_body += f'\tj end_if\n\n'
+            code_section_body += f'else:\n'
+            print(condicao[3+indice+1:-1])
+            for l1 in condicao[3+indice+1:-1]:
+                print(l1)
+                if l1[3] in ['+','-','*','/']:
+                    operacao_aritm(l1)
+                #se for um if chama a funcao recursivamente
+            code_section_body += f'end_if:\n'
+        else:
+            for l in condicao[3:-1]:
+                if l[3] in ['+','-','*','/']:
+                    operacao_aritm(l)
+                #se for um if chama a funcao recursivamente
+            code_section_body += f'end_if:\n'
+
+'''
+def controle_de_fluxo(condicao):
+    global code_section_body
+    global pilha_labels
+
+    #end_if_label = f'end_if{nivel}'
+    #then_label = f'then{nivel}'
+    #else_label = f'else{nivel}'
+
+    
+    if condicao[0][0] == 'if':
+        then_label, else_label, end_if_label = gerar_labels_unicos()
+        print(then_label,else_label,end_if_label)
+        pilha_labels.append((then_label, else_label, end_if_label))
+        if condicao[0][2] == '<':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            elif not eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBEQZ $t7, {condicao[1][1]}\n'
+        elif condicao[0][2] == '==':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t5, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+            elif not eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\taddi $t6, $zero, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t5, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+            code_section_body += f'\tBNE $t5, $t6, {condicao[1][1]}\n'
+        elif condicao[0][2] == '<=':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
+            elif eh_inteiro(condicao[0][1]) and not eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][1]}\n'
+            elif not eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][3]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
+        elif condicao[0][2] == '>=':
+            if eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            elif eh_inteiro(condicao[0][1]) and not eh_inteiro(condicao[0][3]):
+                code_section_body += f'\taddi $t7, $zero, #{condicao[0][1]}\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            elif not eh_inteiro(condicao[0][1]) and eh_inteiro(condicao[0][3]):
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tslti $t7, $t7, #{condicao[0][3]}\n'
+            else:
+                code_section_body += f'\tlw $t7, {condicao[0][1]}(r0)\n'
+                code_section_body += f'\tlw $t6, {condicao[0][3]}(r0)\n'
+                code_section_body += f'\tslt $t7, $t7, $t6\n'
+            code_section_body += f'\tBNEZ $t7, {condicao[1][1]}\n'
+        
+        
+        code_section_body += f'{condicao[2][0]}:\n'
+        
+        if condicao[1][1] != end_if_label:
+            i = 0
+            j = 0
+            indice_then = condicao.index([then_label])
+            indice_else = condicao.index([else_label])
+            print(indice_then,indice_else)
+            bloco_then = condicao[indice_then+1:indice_else-1]
+            
+            bloco_else = condicao[indice_else + 1:-1]
+            print(bloco_then)
+            print(bloco_else)
+            
+            while i < len(bloco_then):
+                if 'if' in bloco_then[i][0]: #se for um if
+                    controle_de_fluxo(bloco_then)
+                    #nivel += 1
+                    i += len(bloco_then)+1
+                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #se for uma operação aritmética
+                    operacao_aritm(bloco_then[i])
+                    i += 1
+                elif len(bloco_then[i]) == 3:
+                    atribuicao_e_copia(bloco_then[i])
+                    i += 1
+            code_section_body += f'\tj {end_if_label}\n'
+            code_section_body += f'{else_label}:\n'
+            
+            while j < len(bloco_else):
+                if 'if' in bloco_else[j][0]: #se for um if
+                    print("opa")
+                    controle_de_fluxo(bloco_else)
+                    #nivel += 1
+                    j += len(bloco_else)+1
+                elif len(bloco_else[j]) > 3 and bloco_else[j][3] in ['+','-','*','/']: #se for uma operação aritmética
+                    operacao_aritm(bloco_else[j])
+                    j += 1
+                elif len(bloco_else[j]) == 3:
+                    atribuicao_e_copia(bloco_else[j])
+                    j += 1
+            
+            code_section_body += f'{end_if_label}:\n'
+         
+        else:
+            print("cabras")
+            i = 0
+            indic = condicao.index([f'{then_label}'])
+            print(indic)
+            print(f'Bloco then: {condicao[indic+1:-1]}')
+            bloco_then = condicao[indic+1:-1]
+            while i < len(bloco_then):
+                if 'if' in bloco_then[i][0]: #se for um if
+                    controle_de_fluxo(bloco_then)
+                    i += len(bloco_then)+1
+                elif len(bloco_then[i]) > 3 and bloco_then[i][3] in ['+','-','*','/']: #se for uma operação aritmética
+                    operacao_aritm(bloco_then[i])
+                    i += 1
+                elif len(bloco_then[i]) == 3:
+                    atribuicao_e_copia(bloco_then[i])
+                    i += 1
+            
+
+            code_section_body += f'{end_if_label}:\n'
+            pilha_labels.pop()
 
         
-    elif ' '.join(condicao).startswith('L') or ' '.join(condicao) == 'goto end_if':
-        print("heehhe")
-        if len(condicao) > 1 and condicao[1] == 'end_if':
-            print("olá")
-            code_section_body += f'\tj end_if\n'
-        elif len(condicao) > 1 and condicao[1] != 'end_if':
-            if len(condicao) == 4:
-                code_section_body += f'{condicao[0]}:\n'
-                atribuicao_e_copia(condicao[1:])
-                
-            
-            elif condicao[4] in ['+','-','*','/']:
-                code_section_body += f'{condicao[0]}:\n'
-                operacao_aritm(condicao[1:])
-                
-            else:
-                print("Não tem")
-        else:
-            code_section_body += f'{condicao[0]}:\n'
-    elif condicao[0] == 'end_if':
-        code_section_body += f'{condicao[0]}:\n'       
+        
     
 def main(argv):
     global data_section_header
     global code_section_body
+    
+    i = 0
     # Captura o nome do arquivo de entrada
     input_file = argv[1]
 
     linhas = parse_input_file(input_file) #Trata o arquivo
     print(linhas)
-    print
-    for l in linhas: 
-        print(l)
-        #Se for igual a 3 é uma atribuição ou cópia
-        if len(l) == 3:
-            print("Atribuição e cópia\n")
-            atribuicao_e_copia(l)
+    print(f'Tamanho da string: {len(linhas)}')
+    
+    
+    while i < len(linhas):
+        if len(linhas[i]) == 3:
+
+            atribuicao_e_copia(linhas[i])
+            i += 1
         #Se for uma operação aritmética
-        elif len(l) > 3 and l[1] == '=':
-            print("Operação aritmética\n")
-            operacao_aritm(l)
-        elif 'if' in l[0] or (('goto' in l[0]) and ((l[1] != 'end_if'))):
-            print("If ou goto")
-            controle_de_fluxo(l)
-        elif ' '.join(l).startswith('L') or 'end_if' in l:
-            print("Label")
-            controle_de_fluxo(l)
+        elif len(linhas[i]) > 3 and linhas[i][1] == '=':
+            operacao_aritm(linhas[i])
+            i += 1
+        elif ''.join(linhas[i]).startswith('if'): #se for um if
+            end_if = nova_label_end_if()
+            indice = linhas[i:].index([end_if]) #{linhas[i+1][1]}
+            print("Lá da main: ",linhas[i:indice+i+1])
+            controle_de_fluxo(linhas[i:indice+i+1])
+            i += indice 
+            
+        else:
+            i += 1
         
 
     code_section_body += f'\tSYSCALL 0\n'
